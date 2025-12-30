@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.db
+*.duckdb
+output/
+
+# Node/Vue
+node_modules/
+dist/
+.env
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
