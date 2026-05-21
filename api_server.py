@@ -15,11 +15,9 @@ from analyzer import HongduAnalyzer
 app = Flask(__name__)
 DB_PATH = "hongdu_analysis.db"
 OUTPUT_DIR = "output"
-FRONTEND_DIR = "vue3"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_FILE = os.path.join(BASE_DIR, DB_PATH)
 OUTPUT_PATH = os.path.join(BASE_DIR, OUTPUT_DIR)
-FRONTEND_PATH = os.path.join(BASE_DIR, FRONTEND_DIR)
 TOKEN_DAYS = 7
 PHONE_REGEX = re.compile(r"^1[3-9]\d{9}$")
 PASSWORD_REGEX = re.compile(r"^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$")
@@ -511,26 +509,6 @@ def _single_user_asset_snapshot(user_id):
 
 
 init_tables()
-
-
-@app.route("/")
-def index():
-    return send_file(os.path.join(FRONTEND_PATH, "index.html"))
-
-
-@app.route("/login")
-def login_page():
-    return send_file(os.path.join(FRONTEND_PATH, "login.html"))
-
-
-@app.route("/admin")
-def admin_page():
-    return send_file(os.path.join(FRONTEND_PATH, "admin.html"))
-
-
-@app.route("/vue3/<path:filename>")
-def serve_frontend_asset(filename):
-    return send_file(os.path.join(FRONTEND_PATH, filename))
 
 
 @app.route("/api/health", methods=["GET"])
