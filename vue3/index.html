@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Grid Advisor Console</title>
+  <link rel="stylesheet" href="/ui/style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">
+        <h1>Grid Advisor Console</h1>
+        <p>Broker Grid Parameter Suggestion Panel</p>
+      </div>
+      <div class="session-bar">
+        <span id="sessionText">未登录</span>
+        <button id="logoutBtn" class="btn subtle" type="button">退出</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section id="authPanel" class="auth-stage">
+        <div class="market-visual">
+          <div class="scan-grid"></div>
+          <div class="ticker-strip">
+            <span>GRID +2.4%</span>
+            <span>RISK LOW</span>
+            <span>09:30-15:30</span>
+          </div>
+          <div class="signal-card primary-signal">
+            <span>主力波偏离</span>
+            <strong>1.86%</strong>
+            <small>自动校准网格间距</small>
+          </div>
+          <div class="signal-card secondary-signal">
+            <span>现金缓冲</span>
+            <strong>20%</strong>
+            <small>每轮计算保留风险预算</small>
+          </div>
+          <div class="market-line" aria-hidden="true">
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+          </div>
+        </div>
+
+        <div class="auth-panel">
+          <div class="auth-tabs" role="tablist" aria-label="账号入口">
+            <button id="loginTabBtn" class="auth-tab active" type="button" role="tab" aria-selected="true">登录</button>
+            <button id="registerTabBtn" class="auth-tab" type="button" role="tab" aria-selected="false">注册</button>
+          </div>
+
+          <form id="loginForm" class="auth-form" novalidate>
+            <h2>进入策略控制台</h2>
+            <p class="muted">登录后管理持仓，并在盘中自动生成网格建议。</p>
+            <label>
+              账号
+              <input id="loginAccountInput" type="text" placeholder="手机号或用户名" autocomplete="username" required />
+              <span class="field-feedback">请输入账号。</span>
+            </label>
+            <label>
+              密码
+              <input id="loginPasswordInput" type="password" placeholder="至少 6 位" autocomplete="current-password" required minlength="6" />
+              <span class="field-feedback">密码至少 6 位。</span>
+            </label>
+            <button id="loginBtn" class="btn primary auth-submit" type="submit">登录</button>
+          </form>
+
+          <form id="registerForm" class="auth-form hidden" novalidate>
+            <h2>创建策略账号</h2>
+            <p class="muted">账号可使用手机号，或 3-32 位英文、数字、下划线用户名。</p>
+            <label>
+              账号
+              <input id="registerAccountInput" type="text" placeholder="例如 trader01" autocomplete="username" required pattern="(1[3-9]\d{9}|[A-Za-z][A-Za-z0-9_]{2,31})" />
+              <span class="field-feedback">请输入手机号，或以字母开头的 3-32 位用户名。</span>
+            </label>
+            <label>
+              密码
+              <input id="registerPasswordInput" type="password" placeholder="至少 6 位" autocomplete="new-password" required minlength="6" />
+              <span class="field-feedback">密码至少 6 位。</span>
+            </label>
+            <label>
+              确认密码
+              <input id="registerConfirmPasswordInput" type="password" placeholder="再次输入密码" autocomplete="new-password" required minlength="6" />
+              <span class="field-feedback">两次密码必须一致。</span>
+            </label>
+            <button id="registerBtn" class="btn primary auth-submit" type="submit">注册并登录</button>
+          </form>
+
+          <div id="authHint" class="auth-alert">请选择登录或注册。</div>
+        </div>
+      </section>
+
+      <section id="workspacePanel" class="panel hidden">
+        <div class="workspace-head">
+          <h2>持仓与网格参数</h2>
+          <div class="row">
+            <label class="inline-label">
+              账户ID
+              <input id="accountIdInput" type="text" value="acc_main" />
+            </label>
+            <label class="inline-label">
+              可用现金
+              <input id="availableCashInput" type="number" step="0.01" min="0" value="0" />
+            </label>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <button id="loadPositionsBtn" class="btn">读取持仓</button>
+          <button id="addRowBtn" class="btn">新增股票</button>
+          <button id="savePositionsBtn" class="btn">保存持仓</button>
+          <button id="analyzeBtn" class="btn primary">生成网格建议</button>
+        </div>
+
+        <div class="schedule-panel">
+          <div>
+            <h3>盘中自动计算</h3>
+            <p class="muted">交易日 09:30 到 15:30，按设定间隔调用当前网格算法。</p>
+          </div>
+          <div class="schedule-controls">
+            <label>
+              间隔
+              <select id="intervalInput">
+                <option value="30">每半小时</option>
+                <option value="60">每小时</option>
+              </select>
+            </label>
+            <label>
+              开始
+              <input id="marketStartInput" type="time" value="09:30" />
+            </label>
+            <label>
+              结束
+              <input id="marketEndInput" type="time" value="15:30" />
+            </label>
+            <button id="runNowBtn" class="btn" type="button">立即计算</button>
+            <button id="startScheduleBtn" class="btn primary" type="button">启动</button>
+            <button id="stopScheduleBtn" class="btn danger" type="button">停止</button>
+          </div>
+          <div class="schedule-meta">
+            <span id="scheduleStateText">未启动</span>
+            <span id="nextRunText">下一次: -</span>
+            <span id="slotsText">时间点: -</span>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table id="positionsTable">
+            <thead>
+              <tr>
+                <th>股票代码</th>
+                <th>名称</th>
+                <th>持仓股数</th>
+                <th>成本价</th>
+                <th>止损价</th>
+                <th>目标价</th>
+                <th>网格间距%</th>
+                <th>每格买入</th>
+                <th>每格卖出</th>
+                <th>层数</th>
+                <th>基准价模式</th>
+                <th>现金保留%</th>
+                <th>最大持仓</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="positionsBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="resultPanel" class="panel hidden">
+        <h2>分析结果</h2>
+        <div id="summaryBox" class="summary-box"></div>
+        <div id="resultList" class="result-list"></div>
+      </section>
+
+      <section id="scheduleLogPanel" class="panel hidden">
+        <h2>盘中计算记录</h2>
+        <div id="scheduleLogList" class="schedule-log-list"></div>
+      </section>
+    </main>
+
+    <footer class="statusbar">
+      <span id="statusText">就绪</span>
+    </footer>
+  </div>
+
+  <template id="rowTemplate">
+    <tr>
+      <td><input data-k="symbol" type="text" placeholder="600513" /></td>
+      <td><input data-k="stock_name" type="text" placeholder="股票名" /></td>
+      <td><input data-k="quantity" type="number" min="0" step="1" value="0" /></td>
+      <td><input data-k="avg_cost" type="number" min="0" step="0.001" value="0" /></td>
+      <td><input data-k="stop_loss" type="number" min="0" step="0.001" value="0" /></td>
+      <td><input data-k="target_price" type="number" min="0" step="0.001" value="0" /></td>
+      <td><input data-k="grid_step_pct" type="number" min="0.2" step="0.1" value="2" /></td>
+      <td><input data-k="grid_buy_shares" type="number" min="1" step="1" value="100" /></td>
+      <td><input data-k="grid_sell_shares" type="number" min="1" step="1" value="100" /></td>
+      <td><input data-k="max_layers" type="number" min="1" max="20" step="1" value="6" /></td>
+      <td>
+        <select data-k="base_price_mode">
+          <option value="current">current</option>
+          <option value="cost">cost</option>
+          <option value="wave">wave</option>
+        </select>
+      </td>
+      <td><input data-k="cash_reserve_pct" type="number" min="0" max="90" step="0.1" value="20" /></td>
+      <td><input data-k="position_cap_shares" type="number" min="1" step="1" value="100000" /></td>
+      <td><button class="btn danger remove-row-btn" type="button">删除</button></td>
+    </tr>
+  </template>
+
+  <script>
+    window.GRID_API_BASE = "";
+  </script>
+  <script src="/ui/app.js?v=20260522-confirm-password"></script>
+</body>
+</html>

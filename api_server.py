@@ -13,14 +13,21 @@ from analyzer import HongduAnalyzer
 
 
 app = Flask(__name__)
+APP_VERSION = "20260522-accounts"
 DB_PATH = "hongdu_analysis.db"
 OUTPUT_DIR = "output"
+FRONTEND_DIR = "vue3"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_FILE = os.path.join(BASE_DIR, DB_PATH)
 OUTPUT_PATH = os.path.join(BASE_DIR, OUTPUT_DIR)
+FRONTEND_PATH = os.path.join(BASE_DIR, FRONTEND_DIR)
 TOKEN_DAYS = 7
-PHONE_REGEX = re.compile(r"^1[3-9]\d{9}$")
-PASSWORD_REGEX = re.compile(r"^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$")
+ACCOUNT_REGEX = re.compile(r"^(1[3-9]\d{9}|[A-Za-z][A-Za-z0-9_]{2,31})$")
+ALLOWED_ORIGINS = {
+    item.strip().rstrip("/")
+    for item in os.environ.get("ALLOWED_ORIGINS", "http://localhost:5000,http://127.0.0.1:5000").split(",")
+    if item.strip()
+}
 
 
 def _db_conn():
@@ -52,7 +59,7 @@ def _hash_text(text):
 def _password_ok(password, allow_admin=False):
     if allow_admin and password == "admin":
         return True
-    return bool(PASSWORD_REGEX.match(password or ""))
+    return len(password or "") >= 6
 
 
 def init_tables():
@@ -448,6 +455,60 @@ def build_grid_advice(metrics, position, available_cash):
     }
 
 
+def analyze_positions(positions, available_cash):
+    analyzer = HongduAnalyzer()
+    results = []
+    total_market_value = 0.0
+    total_unrealized = 0.0
+    for p in positions:
+        symbol = p["symbol"]
+        try:
+            analyzer.run_focused_logic(symbol)
+            metrics = analyzer.get_wave_metrics(symbol, refresh=False)
+            if not metrics:
+                results.append({"symbol": symbol, "error": "no metrics generated"})
+                continue
+            phase_position = analyzer.get_phase_position(symbol, refresh=False)
+            quantity = p["quantity"]
+            avg_cost = p["avg_cost"]
+            current_price = metrics["current_price"]
+            market_value = current_price * quantity
+            unrealized = (current_price - avg_cost) * quantity
+            total_market_value += market_value
+            total_unrealized += unrealized
+            advice = build_grid_advice(metrics, p, available_cash)
+            image_name = f"{symbol}_current_analysis.png"
+            image_path = os.path.join(OUTPUT_PATH, image_name)
+            image_url = f"/api/images/{image_name}?t={int(os.path.getmtime(image_path))}" if os.path.exists(image_path) else ""
+            results.append(
+                {
+                    "symbol": symbol,
+                    "stock_name": p["stock_name"],
+                    "position_config": p,
+                    "quantity": quantity,
+                    "avg_cost": avg_cost,
+                    "current_price": round(current_price, 3),
+                    "market_value": round(market_value, 2),
+                    "unrealized_pnl": round(unrealized, 2),
+                    "wave_metrics": metrics,
+                    "phase_position": phase_position,
+                    "grid_advice": advice,
+                    "image_url": image_url,
+                }
+            )
+        except Exception as ex:
+            traceback.print_exc()
+            results.append({"symbol": symbol, "error": str(ex)})
+    return {
+        "summary": {
+            "positions": len(positions),
+            "market_value": round(total_market_value, 2),
+            "unrealized_pnl": round(total_unrealized, 2),
+        },
+        "results": results,
+    }
+
+
 def _portfolio_asset_snapshot():
     con = _db_conn()
     rows = con.execute(
@@ -511,6 +572,36 @@ def _single_user_asset_snapshot(user_id):
 init_tables()
 
 
+@app.route("/")
+def index():
+    return send_file(os.path.join(FRONTEND_PATH, "index.html"))
+
+
+@app.route("/ui/<path:filename>")
+def serve_frontend_asset(filename):
+    return send_file(os.path.join(FRONTEND_PATH, filename))
+
+
+@app.after_request
+def add_no_cache_headers(response):
+    if request.path == "/" or request.path.startswith("/ui/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    origin = request.headers.get("Origin", "").rstrip("/")
+    if origin in ALLOWED_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Vary"] = "Origin"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    return response
+
+
+@app.route("/api/<path:_path>", methods=["OPTIONS"])
+def api_preflight(_path):
+    return ("", 204)
+
+
 @app.route("/api/health", methods=["GET"])
 def health():
     return jsonify({"ok": True, "time": datetime.now().isoformat()})
@@ -521,15 +612,15 @@ def auth_register():
     payload = request.get_json(silent=True) or {}
     phone = str(payload.get("phone", "")).strip()
     password = str(payload.get("password", ""))
-    if not PHONE_REGEX.match(phone):
-        return jsonify({"error": "invalid phone"}), 400
+    if not ACCOUNT_REGEX.match(phone):
+        return jsonify({"error": "账号需为手机号，或 3-32 位英文/数字/下划线且以字母开头"}), 400
     if not _password_ok(password):
-        return jsonify({"error": "password must contain letters and digits and length>=8"}), 400
+        return jsonify({"error": "密码至少 6 位"}), 400
     con = _db_conn()
     exists = con.execute("SELECT id FROM users WHERE phone = ?", [phone]).fetchone()
     if exists:
         con.close()
-        return jsonify({"error": "phone already exists"}), 409
+        return jsonify({"error": "账号已存在，请直接登录"}), 409
     user_id = f"u_{uuid.uuid4().hex[:10]}"
     now = datetime.now()
     con.execute(
@@ -553,11 +644,11 @@ def auth_login():
     ).fetchone()
     if not row:
         con.close()
-        return jsonify({"error": "invalid credentials"}), 401
+        return jsonify({"error": "账号或密码不正确"}), 401
     user_id, pwd_hash, role, status = row
     if status != "active" or _hash_text(password) != pwd_hash:
         con.close()
-        return jsonify({"error": "invalid credentials"}), 401
+        return jsonify({"error": "账号或密码不正确"}), 401
     token = uuid.uuid4().hex + uuid.uuid4().hex
     now = datetime.now()
     con.execute(
@@ -626,60 +717,44 @@ def analyze_portfolio():
     if not cleaned_positions:
         return jsonify({"error": "no valid positions provided"}), 400
 
-    analyzer = HongduAnalyzer()
-    results = []
-    total_market_value = 0.0
-    total_unrealized = 0.0
-    for p in cleaned_positions:
-        symbol = p["symbol"]
-        try:
-            analyzer.run_focused_logic(symbol)
-            metrics = analyzer.get_wave_metrics(symbol, refresh=False)
-            if not metrics:
-                continue
-            phase_position = analyzer.get_phase_position(symbol, refresh=False)
-            quantity = p["quantity"]
-            avg_cost = p["avg_cost"]
-            current_price = metrics["current_price"]
-            market_value = current_price * quantity
-            unrealized = (current_price - avg_cost) * quantity
-            total_market_value += market_value
-            total_unrealized += unrealized
-            advice = build_grid_advice(metrics, p, available_cash)
-            image_name = f"{symbol}_current_analysis.png"
-            image_path = os.path.join(OUTPUT_PATH, image_name)
-            image_url = f"/api/images/{image_name}?t={int(os.path.getmtime(image_path))}" if os.path.exists(image_path) else ""
-            results.append(
-                {
-                    "symbol": symbol,
-                    "stock_name": p["stock_name"],
-                    "position_config": p,
-                    "quantity": quantity,
-                    "avg_cost": avg_cost,
-                    "current_price": round(current_price, 3),
-                    "market_value": round(market_value, 2),
-                    "unrealized_pnl": round(unrealized, 2),
-                    "wave_metrics": metrics,
-                    "phase_position": phase_position,
-                    "grid_advice": advice,
-                    "image_url": image_url,
-                }
-            )
-        except Exception as ex:
-            traceback.print_exc()
-            results.append({"symbol": symbol, "error": str(ex)})
+    analysis = analyze_positions(cleaned_positions, available_cash)
     _audit(request.current_user["id"], "ANALYZE", "account", account_id, f"count={len(cleaned_positions)}")
     return jsonify(
         {
             "ok": True,
             "account_id": account_id,
             "available_cash": available_cash,
-            "summary": {
-                "positions": len(cleaned_positions),
-                "market_value": round(total_market_value, 2),
-                "unrealized_pnl": round(total_unrealized, 2),
-            },
-            "results": results,
+            "summary": analysis["summary"],
+            "results": analysis["results"],
+        }
+    )
+
+
+@app.route("/api/portfolio/timed-analyze", methods=["POST"])
+@require_auth
+def timed_analyze_portfolio():
+    payload = request.get_json(silent=True) or {}
+    account_id = str(payload.get("account_id", "acc_main")).strip() or "acc_main"
+    available_cash = _to_float(payload.get("available_cash", 0), 0.0)
+    positions = payload.get("positions", [])
+    cleaned_positions = []
+    for p in positions:
+        row = _clean_position_item(p)
+        if row:
+            cleaned_positions.append(row)
+    if not cleaned_positions:
+        return jsonify({"error": "no valid positions provided"}), 400
+
+    analysis = analyze_positions(cleaned_positions, available_cash)
+    _audit(request.current_user["id"], "TIMED_ANALYZE", "account", account_id, f"count={len(cleaned_positions)}")
+    return jsonify(
+        {
+            "ok": True,
+            "account_id": account_id,
+            "available_cash": available_cash,
+            "run_at": datetime.now().isoformat(timespec="seconds"),
+            "summary": analysis["summary"],
+            "results": analysis["results"],
         }
     )
 
@@ -782,7 +857,7 @@ def admin_reset_password(user_id):
     payload = request.get_json(silent=True) or {}
     new_password = str(payload.get("password", ""))
     if not _password_ok(new_password, allow_admin=True):
-        return jsonify({"error": "password must contain letters and digits and length>=8"}), 400
+        return jsonify({"error": "密码至少 6 位"}), 400
     con = _db_conn()
     con.execute("UPDATE users SET password_hash = ? WHERE id = ?", [_hash_text(new_password), user_id])
     changed = con.execute("SELECT COUNT(*) FROM users WHERE id = ?", [user_id]).fetchone()[0]
@@ -937,4 +1012,5 @@ def serve_image(filename):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    debug = os.environ.get("FLASK_DEBUG", "").lower() in ("1", "true", "yes")
+    app.run(host="0.0.0.0", port=5000, debug=debug, use_reloader=debug)
