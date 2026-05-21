@@ -170,3 +170,37 @@ This can work, but HTTPS with a custom domain may require additional Google Clou
 7. Deploy `vue3/` to Firebase Hosting or Google static hosting.
 8. Open the frontend and test register/login.
 9. Test grid analysis with one stock before inviting users.
+
+## Approved Development Plans
+
+When the user explicitly approves a technical plan, record it in this README before or alongside implementation. This keeps the project direction recoverable if a terminal session or chat context is interrupted.
+
+### RL + Markov Analysis First Version
+
+Approved direction: do not start by importing the full FinRL-Trading stack. It may be too large for the first version and could slow down integration with the existing analyzer and grid advisor system.
+
+Use a lighter open-source combination first:
+
+- `hmmlearn`: market regime detection with Hidden Markov Models or Markov-style state transitions.
+- `gymnasium`: wrap the trading/grid strategy into a standard reinforcement learning environment.
+- `stable-baselines3`: train PPO, DQN, SAC, or other RL agents on that environment.
+
+Initial architecture:
+
+```text
+Market data / holdings / main-wave indicators
+  -> hmmlearn market state detection
+  -> Gymnasium TradingEnv
+  -> stable-baselines3 agent training
+  -> risk-control hard filters
+  -> grid parameter suggestion / buy-sell recommendation
+  -> automation order module only after simulation validation
+```
+
+Rules for the first version:
+
+- RL should produce suggestions first, not direct live orders.
+- The risk-control layer must override model output.
+- Train on AutoDL 4090 when needed; run inference on the local i5 server.
+- Start with a small stock universe and 30-minute or daily bars before expanding.
+- Keep FinRL / FinRL-Trading as a later option after the lightweight version works.
