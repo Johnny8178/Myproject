@@ -204,3 +204,18 @@ Rules for the first version:
 - Train on AutoDL 4090 when needed; run inference on the local i5 server.
 - Start with a small stock universe and 30-minute or daily bars before expanding.
 - Keep FinRL / FinRL-Trading as a later option after the lightweight version works.
+
+### Immediate Next Tasks
+
+1. Finish the Google static frontend + Cloudflare Tunnel deployment path end to end.
+2. Build the first version of the `hmmlearn + gymnasium + stable-baselines3` training framework.
+
+### Useful Local Network Check
+
+On Windows, scan visible WiFi networks and their security modes with:
+
+```powershell
+netsh wlan show networks mode=bssid
+```
+
+Use this only for authorized network assessment. Focus on authentication and encryption fields such as `WPA2-Personal`, `WPA3-Personal`, `CCMP`, `Open`, and `WEP`.
