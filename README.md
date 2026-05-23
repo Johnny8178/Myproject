@@ -205,6 +205,66 @@ Rules for the first version:
 - Start with a small stock universe and 30-minute or daily bars before expanding.
 - Keep FinRL / FinRL-Trading as a later option after the lightweight version works.
 
+## Current Progress Snapshot (2026-05-22)
+
+### Completed
+
+- Local backend starts successfully on this Windows machine.
+- Local health check is working:
+  - `http://localhost:5000/api/health`
+- Cloudflare Zero Trust Free has been activated.
+- A `cloudflared` tunnel named `grid-advisor` has been created and connected.
+- Domain purchased in Cloudflare:
+  - `gridwise-ai.com`
+- Public API route has been configured through Cloudflare Tunnel:
+  - `api.gridwise-ai.com -> http://localhost:5000`
+- Public health check is working:
+  - `https://api.gridwise-ai.com/api/health`
+
+### Verified by testing
+
+The following flows were tested successfully against the current local backend:
+
+- user registration
+- user login
+- `/api/me`
+- positions save
+- positions load
+- `/api/portfolio/analyze`
+
+### Known issue
+
+- `/api/portfolio/timed-analyze` is not fully stable yet.
+- In the current smoke test it returned:
+  - `RemoteDisconnected('Remote end closed connection without response')`
+
+This means the main system path is working, but the timed analysis path still needs debugging.
+
+### Frontend configuration status
+
+- `vue3/index.html` currently uses:
+
+```html
+<script>
+  window.GRID_API_BASE = "";
+</script>
+```
+
+This is correct for local same-origin testing.
+
+Before deploying the frontend to Google / Firebase static hosting, update it to:
+
+```html
+<script>
+  window.GRID_API_BASE = "https://api.gridwise-ai.com";
+</script>
+```
+
+### Practical operating note
+
+- In the current local environment, `start.bat` is the reliable way to bring the backend up for browser testing.
+- If the local service is not running, the tunnel cannot forward requests to the app.
+
 ### Immediate Next Tasks
 
 1. Finish the Google static frontend + Cloudflare Tunnel deployment path end to end.

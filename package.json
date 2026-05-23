@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@remotion/cli": "^4.0.464",
+    "remotion": "^4.0.464"
+  }
+}
